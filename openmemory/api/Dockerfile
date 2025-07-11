@@ -10,5 +10,7 @@ RUN pip install -r requirements.txt
 COPY config.json .
 COPY . .
 
+# API key will be provided via environment variables
+
 EXPOSE 8765
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8765"]

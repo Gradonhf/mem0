@@ -1,7 +1,7 @@
 import datetime
 from uuid import uuid4
 
-from app.config import DEFAULT_APP_ID, USER_ID
+from app.config import DEFAULT_APP_ID, USER_ID, API_HOST, API_PORT, API_WORKERS, API_RELOAD
 from app.database import Base, SessionLocal, engine
 from app.mcp_server import setup_mcp_server
 from app.models import App, User

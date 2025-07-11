@@ -5,14 +5,19 @@ services:
       - "6333:6333"
     volumes:
       - mem0_storage:/mem0/storage
+
+
   openmemory-mcp:
     image: mem0/openmemory-mcp
     build: api/
     environment:
-      - USER
-      - API_KEY
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - USER_ID=${USER_ID:-default_user}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./openmemory.db}
+      - QDRANT_HOST=${QDRANT_HOST:-mem0_store}
+      - QDRANT_PORT=${QDRANT_PORT:-6333}
     env_file:
-      - api/.env
+      - .env
     depends_on:
       - mem0_store
     ports:
@@ -21,16 +26,25 @@ services:
       - ./api:/usr/src/openmemory
     command: >
       sh -c "uvicorn main:app --host 0.0.0.0 --port 8765 --reload --workers 4"
+
   openmemory-ui:
     build:
       context: ui/
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_USER_ID: ${NEXT_PUBLIC_USER_ID}
     image: mem0/openmemory-ui:latest
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-      - NEXT_PUBLIC_USER_ID=${USER}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8765}
+      - NEXT_PUBLIC_USER_ID=${USER_ID:-default_user}
+      - NODE_ENV=${NODE_ENV:-production}
+    env_file:
+      - .env
+    depends_on:
+      - openmemory-mcp
 
 volumes:
   mem0_storage:

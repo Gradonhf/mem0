@@ -19,6 +19,7 @@ import contextvars
 import datetime
 import json
 import logging
+import os
 import uuid
 
 from app.database import SessionLocal
@@ -35,6 +36,9 @@ from qdrant_client import models as qdrant_models
 
 # Load environment variables
 load_dotenv()
+
+# Get infer setting
+infer_memories = os.environ.get("INFER_MEMORIES", "True")
 
 # Initialize MCP
 mcp = FastMCP("mem0-mcp-server")
@@ -85,10 +89,11 @@ async def add_memories(text: str) -> str:
 
             response = memory_client.add(text,
                                          user_id=uid,
+                                         infer=infer_memories,
                                          metadata={
-                                            "source_app": "openmemory",
-                                            "mcp_client": client_name,
-                                        })
+                                             "source_app": "openmemory",
+                                             "mcp_client": client_name,
+                                         })
 
             # Process the response and update database
             if isinstance(response, dict) and 'results' in response:

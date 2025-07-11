@@ -249,6 +249,7 @@ async def create_memory(
         qdrant_response = memory_client.add(
             request.text,
             user_id=request.user_id,  # Use string user_id to match search
+            infer=request.infer,
             metadata={
                 "source_app": "openmemory",
                 "mcp_client": request.app,

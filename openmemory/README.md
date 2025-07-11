@@ -10,22 +10,23 @@ OpenMemory is your personal memory layer for LLMs - private, portable, and open-
 - Docker
 - OpenAI API Key
 
-You can quickly run OpenMemory by running the following command:
+You can quickly run OpenMemory using the Makefile:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/mem0ai/mem0/main/openmemory/run.sh | bash
-```
-
-You should set the `OPENAI_API_KEY` as a global environment variable:
-
-```bash
+# Set your OpenAI API key
 export OPENAI_API_KEY=your_api_key
+
+# Create environment file (first time only)
+make env
+
+# Start OpenMemory
+make up
 ```
 
-You can also set the `OPENAI_API_KEY` as a parameter to the script:
+Or run with inline configuration:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/mem0ai/mem0/main/openmemory/run.sh | OPENAI_API_KEY=your_api_key bash
+OPENAI_API_KEY=your_api_key make up
 ```
 
 ## Prerequisites
@@ -33,60 +34,72 @@ curl -sL https://raw.githubusercontent.com/mem0ai/mem0/main/openmemory/run.sh | 
 - Docker and Docker Compose
 - Python 3.9+ (for backend development)
 - Node.js (for frontend development)
-- OpenAI API Key (required for LLM interactions, run `cp api/.env.example api/.env` then change **OPENAI_API_KEY** to yours)
+- OpenAI API Key (required for LLM interactions)
 
 ## Quickstart
 
-### 1. Set Up Environment Variables
+### 1. Configuration
 
-Before running the project, you need to configure environment variables for both the API and the UI.
+OpenMemory now uses a centralized configuration system. You can configure the application in several ways:
 
-You can do this in one of the following ways:
-
-- **Manually**:  
-  Create a `.env` file in each of the following directories:
-  - `/api/.env`
-  - `/ui/.env`
-
-- **Using `.env.example` files**:  
-  Copy and rename the example files:
-
-  ```bash
-  cp api/.env.example api/.env
-  cp ui/.env.example ui/.env
-  ```
-
- - **Using Makefile** (if supported):  
-    Run:
-  
-   ```bash
-   make env
-   ```
-- #### Example `/api/.env`
-
-```env
-OPENAI_API_KEY=sk-xxx
-USER=<user-id> # The User Id you want to associate the memories with 
-```
-- #### Example `/ui/.env`
-
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8765
-NEXT_PUBLIC_USER_ID=<user-id> # Same as the user id for environment variable in api
-```
-
-### 2. Build and Run the Project
-You can run the project using the following two commands:
+**Option 1: Environment Variables**
 ```bash
-make build # builds the mcp server and ui
-make up  # runs openmemory mcp server and ui
+export OPENAI_API_KEY=your_api_key
+export USER_ID=your_user_id
+export ENVIRONMENT=production  # Options: development, docker, production
+```
+
+**Option 2: .env File**
+```bash
+# Copy the example file
+cp env.example .env
+
+# Edit the file with your settings
+nano .env
+```
+
+**Option 3: Docker Compose Environment**
+```yaml
+# In docker-compose.yml
+environment:
+  - OPENAI_API_KEY=your_api_key
+  - USER_ID=your_user_id
+```
+
+### 2. Required Configuration
+
+The only required configuration is your OpenAI API key:
+
+```bash
+OPENAI_API_KEY=sk-your-openai-api-key-here
+```
+
+All other settings have sensible defaults and can be customized as needed.
+
+### 3. Build and Run the Project
+
+**Option 1: Using Makefile (Recommended)**
+```bash
+make env    # create .env file (first time only)
+make up     # start all services
+```
+
+**Option 2: Using Docker Compose directly**
+```bash
+docker compose up -d
+```
+
+**Option 3: Development with Makefile**
+```bash
+make build  # builds the mcp server and ui
+make up     # runs openmemory mcp server and ui
 ```
 
 After running these commands, you will have:
 - OpenMemory MCP server running at: http://localhost:8765 (API documentation available at http://localhost:8765/docs)
 - OpenMemory UI running at: http://localhost:3000
 
-#### UI not working on `localhost:3000`?
+#### Troubleshooting
 
 If the UI does not start properly on [http://localhost:3000](http://localhost:3000), try running it manually:
 

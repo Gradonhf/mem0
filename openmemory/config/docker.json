@@ -1,0 +1,19 @@
+{
+  "app": {
+    "environment": "docker"
+  },
+  "api": {
+    "host": "0.0.0.0",
+    "reload": false,
+    "workers": 4
+  },
+  "vector_store": {
+    "host": "mem0_store"
+  },
+  "ui": {
+    "api_url": "http://openmemory-mcp:8765"
+  },
+  "database": {
+    "url": "sqlite:///./openmemory.db"
+  }
+} 

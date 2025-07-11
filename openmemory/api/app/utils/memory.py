@@ -135,33 +135,10 @@ def reset_memory_client():
 
 def get_default_memory_config():
     """Get default memory client configuration with sensible defaults."""
-    return {
-        "vector_store": {
-            "provider": "qdrant",
-            "config": {
-                "collection_name": "openmemory",
-                "host": "mem0_store",
-                "port": 6333,
-            }
-        },
-        "llm": {
-            "provider": "openai",
-            "config": {
-                "model": "gpt-4o-mini",
-                "temperature": 0.1,
-                "max_tokens": 2000,
-                "api_key": "env:OPENAI_API_KEY"
-            }
-        },
-        "embedder": {
-            "provider": "openai",
-            "config": {
-                "model": "text-embedding-3-small",
-                "api_key": "env:OPENAI_API_KEY"
-            }
-        },
-        "version": "v1.1"
-    }
+    from app.config_manager import config_manager
+    
+    # Use the centralized configuration manager
+    return config_manager.get_mem0_config()["mem0"]
 
 
 def _parse_environment_variables(config_dict):

@@ -1,17 +1,18 @@
-.PHONY: help up down logs shell migrate test test-clean env ui-install ui-start ui-dev ui-build ui-dev-start
-
-NEXT_PUBLIC_USER_ID=$(USER)
-NEXT_PUBLIC_API_URL=http://localhost:8765
+.PHONY: help up down logs shell migrate test test-clean env ui-install ui-start ui-dev ui-build ui-dev-start build clean upgrade downgrade
 
 # Default target
 help:
 	@echo "Available commands:"
-	@echo "  make env       - Copy .env.example to .env"
+	@echo "  make env       - Copy env.example to .env"
+	@echo "  make build     - Build the containers"
 	@echo "  make up        - Start the containers"
 	@echo "  make down      - Stop the containers"
+	@echo "  make clean     - Stop containers and clean up volumes"
 	@echo "  make logs      - Show container logs"
 	@echo "  make shell     - Open a shell in the api container"
 	@echo "  make migrate   - Run database migrations"
+	@echo "  make upgrade   - Run database migrations (alias for migrate)"
+	@echo "  make downgrade - Rollback database migrations"
 	@echo "  make test      - Run tests in a new container"
 	@echo "  make test-clean - Run tests and clean up volumes"
 	@echo "  make ui-install - Install frontend dependencies"
@@ -20,16 +21,37 @@ help:
 	@echo "  make ui        - Install dependencies and start the frontend in production mode"
 
 env:
-	cd api && cp .env.example .env
-	cd ui && cp .env.example .env
+	@if [ ! -f .env ]; then \
+		cp env.example .env; \
+		echo "Created .env file from template. Please edit it with your settings."; \
+	else \
+		echo ".env file already exists. Skipping creation."; \
+	fi
 
 build:
-	docker compose build
+	docker compose build --no-cache
 
 up:
-	NEXT_PUBLIC_USER_ID=$(USER) NEXT_PUBLIC_API_URL=$(NEXT_PUBLIC_API_URL) docker compose up
+	@echo "Starting OpenMemory..."
+	@if [ ! -f .env ]; then \
+		echo "No .env file found. Run 'make env' to create one."; \
+		exit 1; \
+	fi
+	@if [ -z "$(OPENAI_API_KEY)" ]; then \
+		echo "OPENAI_API_KEY not set. Please set it in your environment or .env file."; \
+		echo "Example: export OPENAI_API_KEY=your_api_key"; \
+		exit 1; \
+	fi
+	docker compose up -d
+	@echo "OpenMemory is starting up!"
+	@echo "  API: http://localhost:8765"
+	@echo "  UI: http://localhost:3000"
+	@echo "  API Docs: http://localhost:8765/docs"
 
 down:
+	docker compose down -v
+
+clean:
 	docker compose down -v
 	rm -f api/openmemory.db
 

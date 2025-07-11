@@ -1,0 +1,18 @@
+{
+  "app": {
+    "environment": "development"
+  },
+  "api": {
+    "reload": true,
+    "workers": 1
+  },
+  "database": {
+    "url": "sqlite:///./openmemory_dev.db"
+  },
+  "vector_store": {
+    "host": "localhost"
+  },
+  "ui": {
+    "api_url": "http://localhost:8765"
+  }
+} 
