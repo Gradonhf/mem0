@@ -40,9 +40,10 @@ up:
 		echo "No .env file found. Run 'make env' to create one."; \
 		exit 1; \
 	fi
-	@if [ -z "$(OPENAI_API_KEY)" ]; then \
-		echo "OPENAI_API_KEY not set. Please set it in your environment or .env file."; \
-		echo "Example: export OPENAI_API_KEY=your_api_key"; \
+	@export $(shell grep -v '^#' .env | xargs) && \
+	if [ -z "$$OPENAI_API_KEY" ]; then \
+		echo "OPENAI_API_KEY not set. Please set it in your .env file."; \
+		echo "Example: OPENAI_API_KEY=sk-your-openai-api-key-here"; \
 		exit 1; \
 	fi
 	docker compose up -d
