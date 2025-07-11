@@ -1,4 +1,4 @@
-.PHONY: help up down logs shell migrate test test-clean env ui-install ui-start ui-dev ui-build ui-dev-start build clean upgrade downgrade
+.PHONY: help up down logs shell migrate test test-clean env ui-install ui-start ui-dev ui-build ui-dev-start build clean upgrade downgrade backup backup-sql backup-qdrant
 
 # Default target
 help:
@@ -19,6 +19,9 @@ help:
 	@echo "  make ui-start  - Start the frontend development server"
 	@echo "  make ui-dev    - Install dependencies and start the frontend in dev mode"
 	@echo "  make ui        - Install dependencies and start the frontend in production mode"
+	@echo "  make backup    - Run full backup (SQL + Qdrant)"
+	@echo "  make backup-sql - Backup SQL database only"
+	@echo "  make backup-qdrant - Backup Qdrant vector database only"
 
 env:
 	@if [ ! -f .env ]; then \
@@ -72,3 +75,28 @@ downgrade:
 
 ui-dev:
 	cd ui && NEXT_PUBLIC_USER_ID=$(USER) NEXT_PUBLIC_API_URL=$(NEXT_PUBLIC_API_URL) pnpm install && pnpm dev
+
+# Backup commands
+backup:
+	@echo "Running full backup..."
+	@if [ ! -f .env ]; then \
+		echo "No .env file found. Run 'make env' to create one."; \
+		exit 1; \
+	fi
+	@source .env && ./scripts/backup_all.sh
+
+backup-sql:
+	@echo "Running SQL database backup..."
+	@if [ ! -f .env ]; then \
+		echo "No .env file found. Run 'make env' to create one."; \
+		exit 1; \
+	fi
+	@source .env && ./scripts/backup_postgresql.sh || ./scripts/backup_mysql.sh || ./scripts/backup_sqlite.sh
+
+backup-qdrant:
+	@echo "Running Qdrant vector database backup..."
+	@if [ ! -f .env ]; then \
+		echo "No .env file found. Run 'make env' to create one."; \
+		exit 1; \
+	fi
+	@source .env && ./scripts/backup_qdrant.sh

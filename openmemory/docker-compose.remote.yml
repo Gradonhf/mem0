@@ -1,0 +1,48 @@
+services:
+  openmemory-mcp:
+    image: mem0/openmemory-mcp
+    build: api/
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - USER_ID=${USER_ID:-default_user}
+      - DATABASE_URL=${DATABASE_URL}
+      - QDRANT_HOST=${QDRANT_HOST}
+      - QDRANT_PORT=${QDRANT_PORT}
+      - QDRANT_API_KEY=${QDRANT_API_KEY}  # If using Qdrant Cloud
+    env_file:
+      - .env
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./api:/usr/src/openmemory
+      - ./backups:/backups/openmemory  # Mount backup directory
+    command: >
+      sh -c "uvicorn main:app --host 0.0.0.0 --port 8765 --reload --workers 4"
+
+  openmemory-ui:
+    build:
+      context: ui/
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_USER_ID: ${NEXT_PUBLIC_USER_ID}
+    image: mem0/openmemory-ui:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8765}
+      - NEXT_PUBLIC_USER_ID=${USER_ID:-default_user}
+      - NODE_ENV=${NODE_ENV:-production}
+    env_file:
+      - .env
+    depends_on:
+      - openmemory-mcp
+
+# Note: This configuration assumes you're using remote databases
+# - Remove mem0_store service since you're using remote Qdrant
+# - Update your .env file with remote database URLs
+# - Example .env configuration:
+#   DATABASE_URL=postgresql://user:pass@host:port/db
+#   QDRANT_HOST=your-qdrant-host.com
+#   QDRANT_PORT=6333
+#   QDRANT_API_KEY=your-qdrant-api-key  # If using Qdrant Cloud 
