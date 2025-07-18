@@ -17,6 +17,9 @@ from app.models import (
 from app.schemas import MemoryResponse
 from app.utils.memory import get_memory_client
 from app.utils.permissions import check_memory_access_permissions
+from app.utils.db import get_user_and_app
+from app.utils.db_utils import build_memory_query_simple
+from app.utils.pagination import paginate_select, create_select_from_query
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi_pagination import Page, Params
 from fastapi_pagination.ext.sqlalchemy import paginate as sqlalchemy_paginate
@@ -57,10 +60,10 @@ def update_memory_state(db: Session, memory_id: UUID, new_state: MemoryState, us
     return memory
 
 
-def get_accessible_memory_ids(db: Session, app_id: UUID) -> Set[UUID]:
+def get_accessible_memory_ids(db: Session, app_id: UUID) -> Optional[Set[UUID]]:
     """
     Get the set of memory IDs that the app has access to based on app-level ACL rules.
-    Returns all memory IDs if no specific restrictions are found.
+    Returns None if all memories are accessible, empty set if none accessible.
     """
     # Get app-level access controls
     app_access = db.query(AccessControl).filter(
@@ -156,11 +159,37 @@ async def list_memories(
     if sort_column:
         sort_field = getattr(Memory, sort_column, None)
         if sort_field:
-            query = query.order_by(sort_field.desc()) if sort_direction == "desc" else query.order_by(sort_field.asc())
+            order_by_field = sort_field.desc() if sort_direction == "desc" else sort_field.asc()
+        else:
+            order_by_field = Memory.created_at.desc()
+    else:
+        # Default sorting
+        order_by_field = Memory.created_at.desc()
 
+    # Build cross-database compatible query
+    query = build_memory_query_simple(db, query, order_by_field)
 
-    # Get paginated results
-    paginated_results = sqlalchemy_paginate(query, params)
+    # Convert Query to Select to avoid deprecation warning
+    select_stmt = create_select_from_query(query)
+
+    # Get paginated results using our custom pagination
+    paginated_results = paginate_select(
+        db,
+        select_stmt,
+        model=Memory,
+        page=params.page,
+        size=params.size,
+        transformer=lambda memory: MemoryResponse(
+            id=memory.id,
+            content=memory.content,
+            created_at=memory.created_at,
+            state=memory.state.value,
+            app_id=memory.app_id,
+            app_name=memory.app.name if memory.app else None,
+            categories=[category.name for category in memory.categories],
+            metadata_=memory.metadata_
+        )
+    )
 
     # Filter results based on permissions
     filtered_items = []
@@ -213,17 +242,8 @@ async def create_memory(
     request: CreateMemoryRequest,
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.user_id == request.user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    # Get or create app
-    app_obj = db.query(App).filter(App.name == request.app,
-                                   App.owner_id == user.id).first()
-    if not app_obj:
-        app_obj = App(name=request.app, owner_id=user.id)
-        db.add(app_obj)
-        db.commit()
-        db.refresh(app_obj)
+    # Use the utility function to get or create user and app
+    user, app_obj = get_user_and_app(db, request.user_id, request.app)
 
     # Check if app is active
     if not app_obj.is_active:
@@ -543,7 +563,12 @@ async def filter_memories(
         to_datetime = datetime.fromtimestamp(request.to_date, tz=UTC)
         query = query.filter(Memory.created_at <= to_datetime)
 
-    # Apply sorting
+    # Add eager loading for categories
+    query = query.options(
+        joinedload(Memory.categories)
+    )
+    
+    # Apply sorting and build cross-database compatible query
     if request.sort_column and request.sort_direction:
         sort_direction = request.sort_direction.lower()
         if sort_direction not in ['asc', 'desc']:
@@ -559,36 +584,34 @@ async def filter_memories(
             raise HTTPException(status_code=400, detail="Invalid sort column")
 
         sort_field = sort_mapping[request.sort_column]
-        if sort_direction == 'desc':
-            query = query.order_by(sort_field.desc())
-        else:
-            query = query.order_by(sort_field.asc())
+        order_by_field = sort_field.desc() if sort_direction == 'desc' else sort_field.asc()
     else:
         # Default sorting
-        query = query.order_by(Memory.created_at.desc())
+        order_by_field = Memory.created_at.desc()
+    
+    # Build query that works with both SQLite and PostgreSQL
+    query = build_memory_query_simple(db, query, order_by_field)
 
-    # Add eager loading for categories and make the query distinct
-    query = query.options(
-        joinedload(Memory.categories)
-    ).distinct(Memory.id)
+    # Convert Query to Select to avoid deprecation warning
+    select_stmt = create_select_from_query(query)
 
-    # Use fastapi-pagination's paginate function
-    return sqlalchemy_paginate(
-        query,
-        Params(page=request.page, size=request.size),
-        transformer=lambda items: [
-            MemoryResponse(
-                id=memory.id,
-                content=memory.content,
-                created_at=memory.created_at,
-                state=memory.state.value,
-                app_id=memory.app_id,
-                app_name=memory.app.name if memory.app else None,
-                categories=[category.name for category in memory.categories],
-                metadata_=memory.metadata_
-            )
-            for memory in items
-        ]
+    # Use our custom pagination function
+    return paginate_select(
+        db,
+        select_stmt,
+        model=Memory,
+        page=request.page,
+        size=request.size,
+        transformer=lambda memory: MemoryResponse(
+            id=memory.id,
+            content=memory.content,
+            created_at=memory.created_at,
+            state=memory.state.value,
+            app_id=memory.app_id,
+            app_name=memory.app.name if memory.app else None,
+            categories=[category.name for category in memory.categories],
+            metadata_=memory.metadata_
+        )
     )
 
 
@@ -614,7 +637,7 @@ async def get_related_memories(
         return Page.create([], total=0, params=params)
     
     # Build query for related memories
-    query = db.query(Memory).distinct(Memory.id).filter(
+    base_query = db.query(Memory).filter(
         Memory.user_id == user.id,
         Memory.id != memory_id,
         Memory.state != MemoryState.deleted
@@ -623,28 +646,29 @@ async def get_related_memories(
     ).options(
         joinedload(Memory.categories),
         joinedload(Memory.app)
-    ).order_by(
-        func.count(Category.id).desc(),
-        Memory.created_at.desc()
-    ).group_by(Memory.id)
+    )
     
-    # ⚡ Force page size to be 5
-    params = Params(page=params.page, size=5)
+    # Build cross-database compatible query with DISTINCT ON
+    query = build_memory_query_simple(db, base_query)
     
-    return sqlalchemy_paginate(
-        query,
-        params,
-        transformer=lambda items: [
-            MemoryResponse(
-                id=memory.id,
-                content=memory.content,
-                created_at=memory.created_at,
-                state=memory.state.value,
-                app_id=memory.app_id,
-                app_name=memory.app.name if memory.app else None,
-                categories=[category.name for category in memory.categories],
-                metadata_=memory.metadata_
-            )
-            for memory in items
-        ]
+    # Convert Query to Select to avoid deprecation warning
+    select_stmt = create_select_from_query(query)
+    
+    # Use our custom pagination function with forced page size of 5
+    return paginate_select(
+        db,
+        select_stmt,
+        model=Memory,
+        page=params.page,
+        size=5,
+        transformer=lambda memory: MemoryResponse(
+            id=memory.id,
+            content=memory.content,
+            created_at=memory.created_at,
+            state=memory.state.value,
+            app_id=memory.app_id,
+            app_name=memory.app.name if memory.app else None,
+            categories=[category.name for category in memory.categories],
+            metadata_=memory.metadata_
+        )
     )

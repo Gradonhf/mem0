@@ -1,4 +1,4 @@
-.PHONY: help up down logs shell migrate test test-clean env ui-install ui-start ui-dev ui-build ui-dev-start build clean upgrade downgrade backup backup-sql backup-qdrant
+.PHONY: help up down logs shell migrate test test-clean env ui-install ui-start ui-dev ui-build ui-dev-start build clean upgrade downgrade backup backup-sql backup-qdrant test-qdrant test-qdrant-config test-config
 
 # Default target
 help:
@@ -22,6 +22,9 @@ help:
 	@echo "  make backup    - Run full backup (SQL + Qdrant)"
 	@echo "  make backup-sql - Backup SQL database only"
 	@echo "  make backup-qdrant - Backup Qdrant vector database only"
+	@echo "  make test-qdrant - Test QDRANT connection"
+	@echo "  make test-qdrant-config - Test QDRANT configuration"
+	@echo "  make test-config - Test application configuration"
 
 env:
 	@if [ ! -f .env ]; then \
@@ -32,7 +35,7 @@ env:
 	fi
 
 build:
-	docker compose build --no-cache
+	docker compose build
 
 up:
 	@echo "Starting OpenMemory..."
@@ -101,3 +104,28 @@ backup-qdrant:
 		exit 1; \
 	fi
 	@source .env && ./scripts/backup_qdrant.sh
+
+# Testing commands
+test-qdrant:
+	@echo "Testing QDRANT connection..."
+	@if [ ! -f .env ]; then \
+		echo "No .env file found. Run 'make env' to create one."; \
+		exit 1; \
+	fi
+	@./scripts/test_qdrant_connection.sh
+
+test-qdrant-config:
+	@echo "Testing QDRANT configuration..."
+	@if [ ! -f .env ]; then \
+		echo "No .env file found. Run 'make env' to create one."; \
+		exit 1; \
+	fi
+	@python scripts/test_qdrant_config.py
+
+test-config:
+	@echo "Testing application configuration..."
+	@if [ ! -f .env ]; then \
+		echo "No .env file found. Run 'make env' to create one."; \
+		exit 1; \
+	fi
+	@docker compose exec api python -c "from app.config import QDRANT_HOST, QDRANT_PORT, QDRANT_COLLECTION; print(f'QDRANT_HOST: {QDRANT_HOST}'); print(f'QDRANT_PORT: {QDRANT_PORT}'); print(f'QDRANT_COLLECTION: {QDRANT_COLLECTION}')" || echo "Container not running. Start with 'make up' first."
