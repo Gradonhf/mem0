@@ -166,6 +166,44 @@ async def list_memories(
         # Default sorting
         order_by_field = Memory.created_at.desc()
 
+    # Apply app-specific permission filtering to the query if app_id is provided
+    if app_id:
+        # Check if app exists and is active
+        app = db.query(App).filter(App.id == app_id).first()
+        if not app or not app.is_active:
+            # Return empty results if app doesn't exist or is inactive
+            empty_query = query.filter(Memory.id.is_(None))
+            empty_query = build_memory_query_simple(db, empty_query, order_by_field)
+            empty_select = create_select_from_query(empty_query)
+            return paginate_select(
+                db,
+                empty_select,
+                model=Memory,
+                page=params.page,
+                size=params.size,
+                transformer=lambda memory: MemoryResponse(
+                    id=memory.id,
+                    content=memory.content,
+                    created_at=memory.created_at,
+                    state=memory.state.value,
+                    app_id=memory.app_id,
+                    app_name=memory.app.name if memory.app else None,
+                    categories=[category.name for category in memory.categories],
+                    metadata_=memory.metadata_
+                )
+            )
+        
+        # Apply app-specific access controls to the query
+        accessible_memory_ids = get_accessible_memory_ids(db, app_id)
+        if accessible_memory_ids is not None:
+            # If access is restricted to specific memories, filter by those IDs
+            if len(accessible_memory_ids) == 0:
+                # No accessible memories, return empty results
+                query = query.filter(Memory.id.is_(None))
+            else:
+                # Filter to only accessible memories
+                query = query.filter(Memory.id.in_(accessible_memory_ids))
+
     # Build cross-database compatible query
     query = build_memory_query_simple(db, query, order_by_field)
 
@@ -173,7 +211,7 @@ async def list_memories(
     select_stmt = create_select_from_query(query)
 
     # Get paginated results using our custom pagination
-    paginated_results = paginate_select(
+    return paginate_select(
         db,
         select_stmt,
         model=Memory,
@@ -190,18 +228,6 @@ async def list_memories(
             metadata_=memory.metadata_
         )
     )
-
-    # Filter results based on permissions
-    filtered_items = []
-    for item in paginated_results.items:
-        if check_memory_access_permissions(db, item, app_id):
-            filtered_items.append(item)
-
-    # Update paginated results with filtered items
-    paginated_results.items = filtered_items
-    paginated_results.total = len(filtered_items)
-
-    return paginated_results
 
 
 # Get all categories
@@ -464,10 +490,21 @@ async def pause_memories(
 @router.get("/{memory_id}/access-log")
 async def get_memory_access_log(
     memory_id: UUID,
+    user_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
+    # Verify user exists
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get the memory and verify it belongs to the user
+    memory = get_memory_or_404(db, memory_id)
+    if memory.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied to this memory")
+    
     query = db.query(MemoryAccessLog).filter(MemoryAccessLog.memory_id == memory_id)
     total = query.count()
     logs = query.order_by(MemoryAccessLog.accessed_at.desc()).offset((page - 1) * page_size).limit(page_size).all()

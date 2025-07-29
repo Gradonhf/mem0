@@ -56,6 +56,11 @@ export const constants = {
     icon: <Icon source="/images/augment.png" />,
     iconImage: "/images/augment.png",
   },
+  msty: {
+    name: "Msty.ai",
+    icon: <Icon source="/images/msty.svg" />,
+    iconImage: "/images/msty.svg",
+  },
   default: {
     name: "Default",
     icon: <BiEdit size={18} className="ml-1" />,
@@ -64,19 +69,27 @@ export const constants = {
 };
 
 const SourceApp = ({ source }: { source: string }) => {
-  if (!constants[source as keyof typeof constants]) {
+  const appConfig = constants[source as keyof typeof constants];
+  
+  if (!appConfig) {
+    // Handle custom/dynamic apps
     return (
-      <div>
-        <BiEdit />
-        <span className="text-sm font-semibold">{source}</span>
+      <div className="flex items-center gap-2">
+        <div className="w-4 h-4 rounded-full bg-zinc-700 flex items-center justify-center overflow-hidden">
+          <BiEdit size={12} className="text-zinc-400" />
+        </div>
+        <span className="text-sm font-semibold capitalize">
+          {source.replace(/[-_]/g, ' ')}
+        </span>
       </div>
     );
   }
+  
   return (
     <div className="flex items-center gap-2">
-      {constants[source as keyof typeof constants].icon}
+      {appConfig.icon}
       <span className="text-sm font-semibold">
-        {constants[source as keyof typeof constants].name}
+        {appConfig.name}
       </span>
     </div>
   );

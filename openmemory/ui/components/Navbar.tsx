@@ -13,9 +13,12 @@ import { useStats } from "@/hooks/useStats";
 import { useAppsApi } from "@/hooks/useAppsApi";
 import { Settings } from "lucide-react";
 import { useConfig } from "@/hooks/useConfig";
+import { useSelector } from "react-redux";
+import { RootState } from "@/store/store";
 
 export function Navbar() {
   const pathname = usePathname();
+  const userId = useSelector((state: RootState) => state.profile.userId);
 
   const memoriesApi = useMemoriesApi();
   const appsApi = useAppsApi();
@@ -158,6 +161,12 @@ export function Navbar() {
             Refresh
           </Button>
           <CreateMemoryDialog />
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-800/50 rounded-md border border-zinc-700/50">
+            <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-xs font-medium text-white">
+              {userId.charAt(0).toUpperCase()}
+            </div>
+            <span className="text-sm text-zinc-300 font-medium">{userId}</span>
+          </div>
         </div>
       </div>
     </header>

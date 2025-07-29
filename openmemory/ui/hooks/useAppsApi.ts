@@ -51,12 +51,19 @@ interface FetchAppsParams {
   page_size?: number;
 }
 
+interface CreateAppRequest {
+  name: string;
+  description?: string;
+  metadata?: Record<string, any>;
+}
+
 interface UseAppsApiReturn {
   fetchApps: (params?: FetchAppsParams) => Promise<{ apps: App[], total: number }>;
   fetchAppDetails: (appId: string) => Promise<void>;
   fetchAppMemories: (appId: string, page?: number, pageSize?: number) => Promise<void>;
   fetchAppAccessedMemories: (appId: string, page?: number, pageSize?: number) => Promise<void>;
   updateAppDetails: (appId: string, details: { is_active: boolean }) => Promise<void>;
+  createApp: (appData: CreateAppRequest) => Promise<App>;
   isLoading: boolean;
   error: string | null;
 }
@@ -83,6 +90,7 @@ export const useAppsApi = (): UseAppsApiReturn => {
     dispatch(setAppsLoading());
     try {
       const queryParams = new URLSearchParams({
+        user_id: user_id,
         page: String(page),
         page_size: String(page_size)
       });
@@ -109,14 +117,14 @@ export const useAppsApi = (): UseAppsApiReturn => {
       setIsLoading(false);
       throw new Error(errorMessage);
     }
-  }, [dispatch]);
+  }, [dispatch, user_id]);
 
   const fetchAppDetails = useCallback(async (appId: string): Promise<void> => {
     setIsLoading(true);
     dispatch(setSelectedAppLoading());
     try {
       const response = await axios.get<AppDetails>(
-        `${URL}/api/v1/apps/${appId}`
+        `${URL}/api/v1/apps/${appId}?user_id=${user_id}`
       );
       dispatch(setSelectedAppDetails(response.data));
       setIsLoading(false);
@@ -127,14 +135,14 @@ export const useAppsApi = (): UseAppsApiReturn => {
       setIsLoading(false);
       throw new Error(errorMessage);
     }
-  }, [dispatch]);
+  }, [dispatch, user_id]);
 
   const fetchAppMemories = useCallback(async (appId: string, page: number = 1, pageSize: number = 10): Promise<void> => {
     setIsLoading(true);
     dispatch(setCreatedMemoriesLoading());
     try {
       const response = await axios.get<MemoriesResponse>(
-        `${URL}/api/v1/apps/${appId}/memories?page=${page}&page_size=${pageSize}`
+        `${URL}/api/v1/apps/${appId}/memories?user_id=${user_id}&page=${page}&page_size=${pageSize}`
       );
       dispatch(setCreatedMemoriesSuccess({
         items: response.data.memories,
@@ -148,14 +156,14 @@ export const useAppsApi = (): UseAppsApiReturn => {
       setError(errorMessage);
       setIsLoading(false);
     }
-  }, [dispatch]);
+  }, [dispatch, user_id]);
 
   const fetchAppAccessedMemories = useCallback(async (appId: string, page: number = 1, pageSize: number = 10): Promise<void> => {
     setIsLoading(true);
     dispatch(setAccessedMemoriesLoading());
     try {
       const response = await axios.get<AccessedMemoriesResponse>(
-        `${URL}/api/v1/apps/${appId}/accessed?page=${page}&page_size=${pageSize}`
+        `${URL}/api/v1/apps/${appId}/accessed?user_id=${user_id}&page=${page}&page_size=${pageSize}`
       );
       dispatch(setAccessedMemoriesSuccess({
         items: response.data.memories,
@@ -169,7 +177,7 @@ export const useAppsApi = (): UseAppsApiReturn => {
       setError(errorMessage);
       setIsLoading(false);
     }
-  }, [dispatch]);
+  }, [dispatch, user_id]);
 
   const updateAppDetails = async (appId: string, details: { is_active: boolean }) => {
     setIsLoading(true);
@@ -186,12 +194,32 @@ export const useAppsApi = (): UseAppsApiReturn => {
     }
   };
 
+  const createApp = async (appData: CreateAppRequest): Promise<App> => {
+    setIsLoading(true);
+    try {
+      const response = await axios.post<App>(
+        `${URL}/api/v1/apps/`,
+        appData
+      );
+      setIsLoading(false);
+      // Refresh the apps list after creating a new app
+      await fetchApps();
+      return response.data;
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.detail || err.message || 'Failed to create app';
+      setError(errorMessage);
+      setIsLoading(false);
+      throw new Error(errorMessage);
+    }
+  };
+
   return {
     fetchApps,
     fetchAppDetails,
     fetchAppMemories,
     fetchAppAccessedMemories,
     updateAppDetails,
+    createApp,
     isLoading,
     error
   };

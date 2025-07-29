@@ -220,7 +220,7 @@ export const useMemoriesApi = (): UseMemoriesApiReturn => {
     setError(null);
     try {
       const response = await axios.get<AccessLogResponse>(
-        `${URL}/api/v1/memories/${memoryId}/access-log?page=${page}&page_size=${pageSize}`
+        `${URL}/api/v1/memories/${memoryId}/access-log?user_id=${user_id}&page=${page}&page_size=${pageSize}`
       );
       setIsLoading(false);
       dispatch(setAccessLogs(response.data.logs));

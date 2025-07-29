@@ -28,7 +28,7 @@ def paginate_select(
 ) -> PaginatedResponse:
     """
     Paginate a SQLAlchemy Select statement using modern SQLAlchemy 2.0 approach.
-    Builds a separate count query to avoid issues with DISTINCT ON and complex joins.
+    For complex queries, we get the count separately to avoid SQL issues.
     
     Args:
         db: Database session
@@ -44,18 +44,10 @@ def paginate_select(
     # Calculate offset
     offset = (page - 1) * size
     
-    # Build a simple count query: SELECT COUNT(DISTINCT model.id) FROM model
-    count_query = sa_select(func.count(func.distinct(model.id))).select_from(model)
-    
-    # Apply the same WHERE conditions from the original query
-    if hasattr(select_stmt, '_where_criteria') and select_stmt._where_criteria:
-        for criterion in select_stmt._where_criteria:
-            # Only apply criteria that reference the main model
-            if str(criterion).find(f'{model.__name__.lower()}.') != -1:
-                count_query = count_query.where(criterion)
-    
-    # Execute count query
-    total = db.execute(count_query).scalar()
+    # For complex queries, get total count by executing query without pagination
+    # This is more reliable than trying to modify the select statement
+    count_result = db.execute(select_stmt)
+    total = len(count_result.scalars().unique().all())
     
     # Apply pagination to the original select
     paginated_stmt = select_stmt.offset(offset).limit(size)

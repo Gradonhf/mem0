@@ -16,14 +16,18 @@ import psycopg2
 from pathlib import Path
 from datetime import datetime
 import uuid
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add the api directory to the Python path
 api_path = Path(__file__).parent.parent / "api"
 sys.path.insert(0, str(api_path))
 
 # Database configurations
-SQLITE_DB_PATH = "/usr/src/openmemory/openmemory.db"
-POSTGRES_URL = os.getenv("POSTGRES_URL", "postgresql://openmemory:openmemory_password@localhost:5432/openmemory")
+SQLITE_DB_PATH = "./api/openmemory.db"
+POSTGRES_URL = os.getenv("DATABASE_URL", "postgresql://openmemory:openmemory_password@localhost:5432/openmemory")
 
 def get_sqlite_connection():
     """Get SQLite connection."""
@@ -83,12 +87,15 @@ def migrate_apps():
         for app in apps:
             app_id, owner_id, name, description, metadata, is_active, created_at, updated_at = app
             
+            # Convert SQLite integer to PostgreSQL boolean
+            is_active_bool = bool(is_active) if is_active is not None else False
+            
             # Insert into PostgreSQL
             postgres_cursor.execute("""
                 INSERT INTO apps (id, owner_id, name, description, metadata, is_active, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO NOTHING
-            """, (app_id, owner_id, name, description, metadata, is_active, created_at, updated_at))
+            """, (app_id, owner_id, name, description, metadata, is_active_bool, created_at, updated_at))
         
         postgres_conn.commit()
         print(f"✅ Migrated {len(apps)} apps")
@@ -240,6 +247,9 @@ def main():
     """Run the complete migration."""
     print("Starting migration from SQLite to PostgreSQL...")
     print("=" * 50)
+    print(f"SQLite DB Path: {SQLITE_DB_PATH}")
+    print(f"PostgreSQL URL: {POSTGRES_URL[:50]}...")
+    print()
     
     try:
         migrate_users()

@@ -1,13 +1,21 @@
 from typing import Optional
 from uuid import UUID
+from pydantic import BaseModel
 
 from app.database import get_db
-from app.models import App, Memory, MemoryAccessLog, MemoryState
+from app.models import App, Memory, MemoryAccessLog, MemoryState, User
+from app.config import USER_ID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session, joinedload
 
 router = APIRouter(prefix="/api/v1/apps", tags=["apps"])
+
+# Pydantic models
+class CreateAppRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    metadata: dict = {}
 
 # Helper functions
 def get_app_or_404(db: Session, app_id: UUID) -> App:
@@ -16,9 +24,16 @@ def get_app_or_404(db: Session, app_id: UUID) -> App:
         raise HTTPException(status_code=404, detail="App not found")
     return app
 
+def get_user_or_404(db: Session, user_id: str) -> User:
+    user = db.query(User).filter(User.user_id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
 # List all apps with filtering
 @router.get("/")
 async def list_apps(
+    user_id: str,
     name: Optional[str] = None,
     is_active: Optional[bool] = None,
     sort_by: str = 'name',
@@ -27,25 +42,36 @@ async def list_apps(
     page_size: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
-    # Create a subquery for memory counts
+    # Get the user
+    user = get_user_or_404(db, user_id)
+    
+    # Create a subquery for memory counts (only for this user)
     memory_counts = db.query(
         Memory.app_id,
         func.count(Memory.id).label('memory_count')
     ).filter(
-        Memory.state.in_([MemoryState.active, MemoryState.paused, MemoryState.archived])
+        Memory.state.in_([MemoryState.active, MemoryState.paused, MemoryState.archived]),
+        Memory.user_id == user.id
     ).group_by(Memory.app_id).subquery()
 
-    # Create a subquery for access counts
+    # Create a subquery for access counts (only for this user's memories)
     access_counts = db.query(
         MemoryAccessLog.app_id,
         func.count(func.distinct(MemoryAccessLog.memory_id)).label('access_count')
+    ).join(
+        Memory,
+        MemoryAccessLog.memory_id == Memory.id
+    ).filter(
+        Memory.user_id == user.id
     ).group_by(MemoryAccessLog.app_id).subquery()
 
-    # Base query
+    # Base query - filter apps by owner
     query = db.query(
         App,
         func.coalesce(memory_counts.c.memory_count, 0).label('total_memories_created'),
         func.coalesce(access_counts.c.access_count, 0).label('total_memories_accessed')
+    ).filter(
+        App.owner_id == user.id
     )
 
     # Join with subqueries
@@ -101,21 +127,35 @@ async def list_apps(
 @router.get("/{app_id}")
 async def get_app_details(
     app_id: UUID,
+    user_id: str,
     db: Session = Depends(get_db)
 ):
+    # Get the user
+    user = get_user_or_404(db, user_id)
+    
     app = get_app_or_404(db, app_id)
+    
+    # Verify that the app belongs to the user
+    if app.owner_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied to this app")
 
-    # Get memory access statistics
+    # Get memory access statistics (only for this user's memories)
     access_stats = db.query(
         func.count(MemoryAccessLog.id).label("total_memories_accessed"),
         func.min(MemoryAccessLog.accessed_at).label("first_accessed"),
         func.max(MemoryAccessLog.accessed_at).label("last_accessed")
-    ).filter(MemoryAccessLog.app_id == app_id).first()
+    ).join(
+        Memory,
+        MemoryAccessLog.memory_id == Memory.id
+    ).filter(
+        MemoryAccessLog.app_id == app_id,
+        Memory.user_id == user.id
+    ).first()
 
     return {
         "is_active": app.is_active,
         "total_memories_created": db.query(Memory)
-            .filter(Memory.app_id == app_id)
+            .filter(Memory.app_id == app_id, Memory.user_id == user.id)
             .count(),
         "total_memories_accessed": access_stats.total_memories_accessed or 0,
         "first_accessed": access_stats.first_accessed,
@@ -126,13 +166,23 @@ async def get_app_details(
 @router.get("/{app_id}/memories")
 async def list_app_memories(
     app_id: UUID,
+    user_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
-    get_app_or_404(db, app_id)
+    # Get the user
+    user = get_user_or_404(db, user_id)
+    
+    app = get_app_or_404(db, app_id)
+    
+    # Verify that the app belongs to the user
+    if app.owner_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied to this app")
+    
     query = db.query(Memory).filter(
         Memory.app_id == app_id,
+        Memory.user_id == user.id,
         Memory.state.in_([MemoryState.active, MemoryState.paused, MemoryState.archived])
     )
     # Add eager loading for categories
@@ -162,12 +212,21 @@ async def list_app_memories(
 @router.get("/{app_id}/accessed")
 async def list_app_accessed_memories(
     app_id: UUID,
+    user_id: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
+    # Get the user
+    user = get_user_or_404(db, user_id)
     
-    # Get memories with access counts
+    app = get_app_or_404(db, app_id)
+    
+    # Verify that the app belongs to the user
+    if app.owner_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied to this app")
+    
+    # Get memories with access counts (only for this user's memories)
     query = db.query(
         Memory,
         func.count(MemoryAccessLog.id).label("access_count")
@@ -175,7 +234,8 @@ async def list_app_accessed_memories(
         MemoryAccessLog,
         Memory.id == MemoryAccessLog.memory_id
     ).filter(
-        MemoryAccessLog.app_id == app_id
+        MemoryAccessLog.app_id == app_id,
+        Memory.user_id == user.id
     ).group_by(
         Memory.id
     ).order_by(
@@ -221,3 +281,55 @@ async def update_app_details(
     app.is_active = is_active
     db.commit()
     return {"status": "success", "message": "Updated app details successfully"}
+
+# Create new app
+@router.post("/")
+async def create_app(
+    request: CreateAppRequest,
+    user_id: str = USER_ID,
+    db: Session = Depends(get_db)
+):
+    # Get the user
+    user = get_user_or_404(db, user_id)
+    
+    # Validate app name format
+    import re
+    if not re.match(r'^[a-z0-9-]+$', request.name):
+        raise HTTPException(
+            status_code=400,
+            detail="App name must contain only lowercase letters, numbers, and hyphens"
+        )
+    
+    # Check if app with this name already exists for this user
+    existing_app = db.query(App).filter(
+        App.name == request.name,
+        App.owner_id == user.id
+    ).first()
+    
+    if existing_app:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"App with name '{request.name}' already exists for this user"
+        )
+    
+    # Create new app
+    app = App(
+        owner_id=user.id,
+        name=request.name,
+        description=request.description,
+        metadata_=request.metadata,
+        is_active=True
+    )
+    
+    db.add(app)
+    db.commit()
+    db.refresh(app)
+    
+    return {
+        "id": app.id,
+        "name": app.name,
+        "description": app.description,
+        "is_active": app.is_active,
+        "total_memories_created": 0,
+        "total_memories_accessed": 0
+    }

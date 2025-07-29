@@ -15,6 +15,7 @@ const clientTabs = [
   { key: "witsy", label: "Witsy", icon: "/images/witsy.png" },
   { key: "enconvo", label: "Enconvo", icon: "/images/enconvo.png" },
   { key: "augment", label: "Augment", icon: "/images/augment.png" },
+  { key: "msty", label: "Msty.ai", icon: "/images/msty.svg" },
 ];
 
 const colorGradientMap: { [key: string]: string } = {
@@ -32,6 +33,10 @@ const colorGradientMap: { [key: string]: string } = {
     "data-[state=active]:bg-[linear-gradient(to_top,_rgba(33,135,255,0.3),_rgba(33,135,255,0))] data-[state=active]:border-[#2187FF]",
   enconvo:
     "data-[state=active]:bg-[linear-gradient(to_top,_rgba(126,63,242,0.3),_rgba(126,63,242,0))] data-[state=active]:border-[#7E3FF2]",
+  augment:
+    "data-[state=active]:bg-[linear-gradient(to_top,_rgba(107,33,168,0.3),_rgba(107,33,168,0))] data-[state=active]:border-primary]",
+  msty:
+    "data-[state=active]:bg-[linear-gradient(to_top,_rgba(99,102,241,0.3),_rgba(99,102,241,0))] data-[state=active]:border-[#6366F1]",
 };
 
 const getColorGradient = (color: string) => {
@@ -45,9 +50,38 @@ const allTabs = [{ key: "mcp", label: "MCP Link", icon: "🔗" }, ...clientTabs]
 
 export const Install = () => {
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
+  const [hasOverflow, setHasOverflow] = useState(false);
+  const [showLeftFade, setShowLeftFade] = useState(false);
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const user = process.env.NEXT_PUBLIC_USER_ID || "Gradon1";
 
   const URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8765";
+
+  // Check for overflow on mount and resize
+  React.useEffect(() => {
+    const checkOverflow = () => {
+      if (scrollContainerRef.current) {
+        const { scrollWidth, clientWidth } = scrollContainerRef.current;
+        setHasOverflow(scrollWidth > clientWidth);
+      }
+    };
+
+    const handleScroll = () => {
+      if (scrollContainerRef.current) {
+        const { scrollLeft } = scrollContainerRef.current;
+        setShowLeftFade(scrollLeft > 0);
+      }
+    };
+
+    checkOverflow();
+    window.addEventListener('resize', checkOverflow);
+    scrollContainerRef.current?.addEventListener('scroll', handleScroll);
+    
+    return () => {
+      window.removeEventListener('resize', checkOverflow);
+      scrollContainerRef.current?.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
   const handleCopy = async (tab: string, isMcp: boolean = false) => {
     const text = isMcp
@@ -96,30 +130,46 @@ export const Install = () => {
       </div>
 
       <Tabs defaultValue="claude" className="w-full">
-        <TabsList className="bg-transparent border-b border-zinc-800 rounded-none w-full justify-start gap-0 p-0 grid grid-cols-9">
-          {allTabs.map(({ key, label, icon }) => (
-            <TabsTrigger
-              key={key}
-              value={key}
-              className={`flex-1 px-0 pb-2 rounded-none ${getColorGradient(
-                key
-              )} data-[state=active]:border-b-2 data-[state=active]:shadow-none text-zinc-400 data-[state=active]:text-white flex items-center justify-center gap-2 text-sm`}
-            >
-              {icon.startsWith("/") ? (
-                <div>
-                  <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center overflow-hidden">
-                    <Image src={icon} alt={label} width={40} height={40} />
+        <div 
+          ref={scrollContainerRef}
+          className="border-b border-zinc-800 overflow-x-auto pb-1 relative" 
+          style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#3f3f46 transparent'
+          }}
+        >
+          <TabsList className="bg-transparent rounded-none w-full justify-start gap-0 p-0 flex min-w-max">
+            {allTabs.map(({ key, label, icon }) => (
+              <TabsTrigger
+                key={key}
+                value={key}
+                className={`flex-shrink-0 px-4 pb-2 rounded-none ${getColorGradient(
+                  key
+                )} data-[state=active]:border-b-2 data-[state=active]:shadow-none text-zinc-400 data-[state=active]:text-white flex items-center justify-center gap-2 text-sm whitespace-nowrap`}
+              >
+                {icon.startsWith("/") ? (
+                  <div>
+                    <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center overflow-hidden">
+                      <Image src={icon} alt={label} width={40} height={40} />
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <div className="h-6">
-                  <span className="relative top-1">{icon}</span>
-                </div>
-              )}
-              <span>{label}</span>
-            </TabsTrigger>
-          ))}
-        </TabsList>
+                ) : (
+                  <div className="h-6">
+                    <span className="relative top-1">{icon}</span>
+                  </div>
+                )}
+                <span>{label}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+          {/* Fade indicators - only show when needed */}
+          {hasOverflow && (
+            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-zinc-900 to-transparent pointer-events-none"></div>
+          )}
+          {showLeftFade && (
+            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-zinc-900 to-transparent pointer-events-none"></div>
+          )}
+        </div>
 
         {/* MCP Tab Content */}
         <TabsContent value="mcp" className="mt-6">

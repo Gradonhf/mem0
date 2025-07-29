@@ -11,6 +11,7 @@ import { constants } from "@/components/shared/source-app";
 import { App } from "@/store/appsSlice";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { BiEdit } from "react-icons/bi";
 
 interface AppCardProps {
   app: App;
@@ -21,13 +22,20 @@ export function AppCard({ app }: AppCardProps) {
   const appConfig =
     constants[app.name as keyof typeof constants] || constants.default;
   const isActive = app.is_active;
+  
+  // Handle custom apps that aren't in the predefined constants
+  const isCustomApp = !constants[app.name as keyof typeof constants];
 
   return (
     <Card className="bg-zinc-900 text-white border-zinc-800">
       <CardHeader className="pb-2">
         <div className="flex items-center gap-1">
           <div className="relative z-10 rounded-full overflow-hidden bg-[#2a2a2a] w-6 h-6 flex items-center justify-center flex-shrink-0">
-            {appConfig.iconImage ? (
+            {isCustomApp ? (
+              <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center overflow-hidden">
+                <BiEdit size={16} className="text-zinc-400" />
+              </div>
+            ) : appConfig.iconImage ? (
               <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center overflow-hidden">
                 <Image
                   src={appConfig.iconImage}
@@ -42,7 +50,9 @@ export function AppCard({ app }: AppCardProps) {
               </div>
             )}
           </div>
-          <h2 className="text-xl font-semibold">{appConfig.name}</h2>
+          <h2 className="text-xl font-semibold">
+            {isCustomApp ? app.name.replace(/[-_]/g, ' ') : appConfig.name}
+          </h2>
         </div>
       </CardHeader>
       <CardContent className="pb-4 my-1">
